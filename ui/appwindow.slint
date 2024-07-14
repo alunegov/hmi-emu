@@ -1,0 +1,55 @@
+import { Button, VerticalBox, HorizontalBox, CheckBox } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "hmi-emu";
+    
+    preferred-width: 400px;
+    preferred-height: 300px;
+
+    in property <float> ai1: 0.0;
+    in property <float> ai2: 0.0;
+    in property <float> ai3: 0.0;
+
+    in property <float> ao1: 0.0;
+    in property <float> ao2: 0.0;
+    in property <float> ao3: 0.0;
+
+    in property checked1 <=> ch1.checked;
+    in property checked2 <=> ch2.checked;
+    in property checked3 <=> ch3.checked;
+    in property checked4 <=> ch4.checked;
+    in property checked5 <=> ch5.checked;
+    in property checked6 <=> ch6.checked;
+
+    callback cb_checked(int, bool);
+
+    VerticalLayout {
+        HorizontalBox {
+            VerticalBox {
+                Text { text: "ai1"; vertical-alignment: center; font-weight: 600; }
+                Text { text: "ai2"; vertical-alignment: center; font-weight: 600; }
+                Text { text: "ai3"; vertical-alignment: center; font-weight: 600; }
+                Text { text: "ao1"; vertical-alignment: center; font-weight: 600; }
+                Text { text: "ao2"; vertical-alignment: center; font-weight: 600; }
+                Text { text: "ao3"; vertical-alignment: center; font-weight: 600; }
+            }
+            VerticalBox {
+                horizontal-stretch: 1;
+                Text { text: "\{root.ai1}"; vertical-alignment: center; }
+                Text { text: "\{root.ai2}"; vertical-alignment: center; }
+                Text { text: "\{root.ai3}"; vertical-alignment: center; }
+                Text { text: "\{root.ao1}"; vertical-alignment: center; }
+                Text { text: "\{root.ao2}"; vertical-alignment: center; }
+                Text { text: "\{root.ao3}"; vertical-alignment: center; }
+            }
+            VerticalBox {
+                ch1 := CheckBox { text: "V / mA"; toggled => { root.cb_checked(0, self.checked); } }
+                ch2 := CheckBox { text: "V / mA"; toggled => { root.cb_checked(1, self.checked); } }
+                ch3 := CheckBox { text: "V / mA"; toggled => { root.cb_checked(2, self.checked); } }
+                ch4 := CheckBox { text: "V / mA"; toggled => { root.cb_checked(3, self.checked); } }
+                ch5 := CheckBox { text: "V / mA"; toggled => { root.cb_checked(4, self.checked); } }
+                ch6 := CheckBox { text: "V / mA"; toggled => { root.cb_checked(5, self.checked); } }
+            }
+        }
+    }
+}

@@ -6,6 +6,8 @@ export component AppWindow inherits Window {
     preferred-width: 400px;
     preferred-height: 300px;
 
+    in property <string> devicesCommState: "---";
+
     in property <float> ai1: 0.0;
     in property <float> ai2: 0.0;
     in property <float> ai3: 0.0;
@@ -24,6 +26,10 @@ export component AppWindow inherits Window {
     callback cb_checked(int, bool);
 
     VerticalLayout {
+        HorizontalBox {
+            Text { text: "DevicesCommState"; }
+            Text { text: "\{root.devicesCommState}"; }
+        }
         HorizontalBox {
             VerticalBox {
                 Text { text: "ai1"; vertical-alignment: center; font-weight: 600; }

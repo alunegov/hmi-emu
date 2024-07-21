@@ -24,7 +24,7 @@ fn main() {
             let rsp =  ctx.read_input_registers(544, 2).await.unwrap().unwrap();
             println!("r544 value is: {rsp:?}");
 
-            p273 = (rsp[0] as u32) | ((rsp[1] as u32) << 8);
+            p273 = to_int(rsp[0], rsp[1]);
 
             let ui_copy = ui_weak.clone();
             let _ = slint::invoke_from_event_loop(move || {
@@ -39,6 +39,21 @@ fn main() {
         }
 
         loop {
+            // p227
+            {
+                let rsp = ctx.read_input_registers(452, 2).await.unwrap().unwrap();
+                //println!("r452 value is: {rsp:?}");
+
+                let p227 = to_int(rsp[0], rsp[1]);
+                //println!("p227 value is: 0b{p227:b}");
+
+                let ui_copy = ui_weak.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let ui = ui_copy.unwrap();
+                    ui.set_devicesCommState(format!("0b{p227:b}").into());
+                });
+            }
+
             // ai
             {
                 let rsp = ctx.read_input_registers(80, 12).await.unwrap().unwrap();
@@ -103,6 +118,10 @@ fn main() {
     });
 
     ui.run().unwrap();
+}
+
+fn to_int(lo: u16, hi: u16) -> u32 {
+    (lo as u32) | ((hi as u32) << 8)
 }
 
 fn to_float(lo: u16, hi: u16) -> f32 {

@@ -1,0 +1,103 @@
+import { Button, VerticalBox, HorizontalBox, CheckBox, TextEdit, ScrollView, ComboBox } from "std-widgets.slint";
+
+export component ParamFlags inherits Window {
+    in-out property <[bool]> model;
+    in property <bool> read-only: false;
+
+    callback flag_clicked(int, bool);
+
+    HorizontalLayout {
+        for it in 32: VerticalLayout {
+            Text {
+                text: 31 - it;
+                horizontal-alignment: center;
+            }
+            CheckBox {
+                checked: model[31 - it];
+                enabled: !read-only;
+                toggled => {
+                    model[31 - it] = self.checked;
+                    root.flag_clicked(it, self.checked);
+                }
+            }
+        }
+    }
+}
+
+export struct Param {
+    id: int,
+    text: string,
+    type_: int,
+    val0: [bool],
+    val1: float,
+}
+
+export component AppWindow inherits Window {
+    title: "hmi-emu";
+    
+    preferred-width: 400px;
+    preferred-height: 300px;
+
+    in property <string> uni_value: "0";
+
+    callback uni_load_clicked(string, int);
+    callback uni_save_clicked(string, int, string);
+
+    in property <[Param]> params: [
+        {id: 2, text: "test1", type_: 0, val0: [true, false,], val1: 0.0},
+        {id: 4, text: "test2", type_: 1, val0: [], val1: 0.13},
+    ];
+
+    callback flag_clicked(int, [bool]);
+
+    ScrollView {
+        VerticalLayout {
+            HorizontalBox {
+                Text { text: "id:"; vertical-alignment: center; width: self.preferred-width; }
+                uni_id_text := TextInput { text: "1"; vertical-alignment: center; }
+
+                Text { text: "type:"; vertical-alignment: center; width: self.preferred-width; }
+                uni_type_cb := ComboBox {
+                    width: 2 * self.preferred-width;
+                    model: ["float", "u32"];
+                    current-index: 0;
+                }
+
+                Text { text: "value:  \{uni_value}"; vertical-alignment: center; }
+                
+                Button {
+                    text: "Load";
+                    max-width: 100px;
+                    clicked => { root.uni_load_clicked(uni_id_text.text, uni_type_cb.current-index); }
+                }
+
+                Text { text: "new value:"; vertical-alignment: center; width: self.preferred-width; }
+                uni_new_value_text := TextInput { text: "0"; vertical-alignment: center; }
+
+                Button {
+                    text: "Save";
+                    max-width: 100px;
+                    clicked => { root.uni_save_clicked(uni_id_text.text, uni_type_cb.current-index, uni_new_value_text.text); }
+                }
+            }
+
+            for it in params: HorizontalBox {
+                Text {
+                    text: it.text;
+                    vertical-alignment: center;
+                    max-width: 300px;
+                }
+
+                if it.type_ == 0: flags := ParamFlags {
+                    model: it.val0;
+                    flag_clicked(a, b) => { root.flag_clicked(it.id, flags.model); }
+                }
+
+                if it.type_ == 1: Text {
+                    text: it.val1;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}

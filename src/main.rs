@@ -30,12 +30,14 @@ fn main() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.spawn(async move {
         'conn: loop {
+            sleep(time::Duration::from_millis(1000));
+
             let mut ctx = match tcp::connect(socket_addr).await {
-                Ok(ctx) => { println!("connected"); ctx },
-                Err(err) => { println!("Conn0 = {err:?}"); continue 'conn; },
+                Ok(ctx) => { println!("Connected"); ctx },
+                Err(err) => { println!("Conn0, {err:?}"); continue 'conn; },
             };
 
-            loop {
+            'read: loop {
                 {
                     //let now = Instant::now();
 
@@ -44,9 +46,9 @@ fn main() {
                         let rsp = match ctx.read_input_registers((it.id - 1) * 2, 2).await {
                             Ok(rsp) => match rsp {
                                 Ok(rsp) => rsp,
-                                Err(err) => { println!("Exc1 = {err:?}"); vec![0u16, 0u16] },
+                                Err(err) => { println!("Exc1, {err:?}"); vec![0u16, 0u16] },
                             },
-                            Err(err) => { println!("Conn1 = {err:?}"); continue 'conn; },
+                            Err(err) => { println!("Conn1, {err:?}"); break 'read; },
                         };
                         //println!("{} value is: {rsp:?}", it.0);
 
@@ -97,9 +99,9 @@ fn main() {
                         let rsp = match ctx.read_input_registers(((id - 1) * 2) as u16, 2).await {
                             Ok(rsp) => match rsp {
                                 Ok(rsp) => rsp,
-                                Err(err) => { println!("Exc2 = {err:?}"); vec![0u16, 0u16] },
+                                Err(err) => { println!("Exc2, {err:?}"); vec![0u16, 0u16] },
                             }
-                            Err(err) => { println!("Conn2 = {err:?}"); continue 'conn; }
+                            Err(err) => { println!("Conn2, {err:?}"); break 'read; }
                         };
                         println!("read time {:?}", now.elapsed());
                         //println!("{} value is: {rsp:?}", id);
@@ -126,9 +128,9 @@ fn main() {
                         match ctx.write_multiple_registers(((id - 1) * 2) as u16, &req).await {
                             Ok(rsp) => match rsp {
                                 Ok(rsp) => rsp,
-                                Err(err) => println!("Exc3 = {err:?}"),
+                                Err(err) => println!("Exc3, {err:?}"),
                             },
-                            Err(err) => { println!("Conn3 = {err:?}"); continue 'conn; },
+                            Err(err) => { println!("Conn3, {err:?}"); break 'read; },
                         }
                         println!("write time {:?}", now.elapsed());
                     }
@@ -137,8 +139,15 @@ fn main() {
                 sleep(time::Duration::from_millis(500));
             }
 
-            //println!("Disconnecting");
-            //ctx.disconnect().await.unwrap();
+            // TODO: clear ui
+
+            match ctx.disconnect().await {
+                Ok(res) => match res {
+                    Ok(_) => println!("Disconnected"),
+                    Err(err) => println!("Exc4, {err:?}"),
+                },
+                Err(err) => println!("Conn4, {err:?}"),
+            };
         }
     });
 

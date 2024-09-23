@@ -1,8 +1,11 @@
 use core::time;
+use chrono::Local;
 use miniserde::{json, Deserialize};
-use std::{env, fs, rc::Rc, sync::mpsc, thread::sleep, time::Instant};
+use std::{env, fmt::Debug, fs, io::{BufWriter, Write}, rc::Rc, sync::mpsc, thread::sleep, time::Instant};
 use slint::{Model, ModelRc, VecModel};
 use tokio_modbus::prelude::*;
+
+slint::include_modules!();
 
 #[derive(Deserialize, Debug)]
 struct ParamSpec {
@@ -11,7 +14,12 @@ struct ParamSpec {
     type_: i32,
 }
 
-slint::include_modules!();
+struct PersistParam {
+    id: u16,
+    //name: String,
+    //type_: i32,
+    val: f32,
+}
 
 fn main() {
     let mut args = env::args();
@@ -27,8 +35,13 @@ fn main() {
 
     let (tx1, rx1) = mpsc::channel();
 
+    let storage_fname = format!("hmi-emu_{}.json", Local::now().format("%Y%m%d_%H%M%S"));
+    let storage = fs::File::create(storage_fname).unwrap();
+
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.spawn(async move {
+        let mut storage_writer = BufWriter::new(storage);
+
         'conn: loop {
             sleep(time::Duration::from_millis(1000));
 
@@ -38,10 +51,13 @@ fn main() {
             };
 
             'read: loop {
+                // read params based on params_spec
                 {
                     //let now = Instant::now();
 
-                    let mut params: Vec<(i32, String, i32, Vec<bool>, f32)> = vec![];
+                    let mut ui_params: Vec<(i32, String, i32, Vec<bool>, f32)> = vec![];
+                    let mut persist_params: Vec<PersistParam> = vec![];
+
                     for it in &params_spec {
                         let rsp = match ctx.read_input_registers((it.id - 1) * 2, 2).await {
                             Ok(rsp) => match rsp {
@@ -62,13 +78,26 @@ fn main() {
                                     bits[i] = (param & (1u32 << i)) != 0;
                                 }
             
-                                params.push((it.id.into(), it.name.clone(), it.type_, bits, 0.0));
+                                ui_params.push((it.id.into(), it.name.clone(), it.type_, bits, 0.0));
+                                
+                                persist_params.push(PersistParam{
+                                    id: it.id.into(),
+                                    //name: it.name.clone(),
+                                    //type_: it.type_,
+                                    val: param as f32,
+                                });
                             }
                             1 => {
                                 let param = to_float(rsp[0], rsp[1]);
                                 //println!("{} value is: {param}", it.0);
 
-                                params.push((it.id.into(), it.name.clone(), it.type_, vec![], param));
+                                ui_params.push((it.id.into(), it.name.clone(), it.type_, vec![], param));
+                                persist_params.push(PersistParam{
+                                    id: it.id.into(),
+                                    //name: it.name.clone(),
+                                    //type_: it.type_,
+                                    val: param,
+                                });
                             }
                             _ => unreachable!()
                         }
@@ -76,11 +105,12 @@ fn main() {
 
                     //println!("read {}x time {:?}", params_spec.len(), now.elapsed());
 
+                    // update ui
                     let ui_copy = ui_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         let ui = ui_copy.unwrap();
                         let params_model: Rc<VecModel<Param>> = Default::default();
-                        for it in params {
+                        for it in ui_params {
                             params_model.push(Param{
                                 id: it.0,
                                 text: it.1.into(),
@@ -91,8 +121,29 @@ fn main() {
                         }
                         ui.set_params(ModelRc::from(params_model));
                     });
+
+                    // save to file
+                    {
+                        let t = format!("{{\"time\":\"{}\"", Local::now().to_rfc3339());
+                        if let Err(err) = storage_writer.write_all(t.as_bytes()) {
+                            println!("write_all, {err:?}");
+                        }
+                        for pp in persist_params {
+                            let t = format!(",\"{}\":{}", pp.id, pp.val);
+                            if let Err(err) = storage_writer.write_all(t.as_bytes()) {
+                                println!("write_all, {err:?}");
+                            }
+                        }
+                        if let Err(err) = storage_writer.write_all(b"},\n") {
+                            println!("write_all, {err:?}");
+                        }
+                        if let Err(err) = storage_writer.flush() {
+                            println!("flush, {err:?}");
+                        }
+                    }
                 }
 
+                // process read request from ui (uni)
                 {
                     if let Ok((id, type_)) = rx2.try_recv() {
                         let now = Instant::now();
@@ -120,6 +171,7 @@ fn main() {
                     }
                 }
 
+                // process write request from ui (uni or flag)
                 {
                     if let Ok((id, req0, req1)) = rx1.try_recv() {
                         let req = [req0, req1];

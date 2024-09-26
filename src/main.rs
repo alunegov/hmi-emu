@@ -18,7 +18,7 @@ struct PersistParam {
     id: u16,
     //name: String,
     //type_: i32,
-    val: f32,
+    val: f64,
 }
 
 fn main() {
@@ -84,7 +84,7 @@ fn main() {
                                     id: it.id.into(),
                                     //name: it.name.clone(),
                                     //type_: it.type_,
-                                    val: param as f32,
+                                    val: param as f64,
                                 });
                             }
                             1 => {
@@ -92,11 +92,12 @@ fn main() {
                                 //println!("{} value is: {param}", it.0);
 
                                 ui_params.push((it.id.into(), it.name.clone(), it.type_, vec![], param));
+
                                 persist_params.push(PersistParam{
                                     id: it.id.into(),
                                     //name: it.name.clone(),
                                     //type_: it.type_,
-                                    val: param,
+                                    val: param as f64,
                                 });
                             }
                             _ => unreachable!()

@@ -14,6 +14,7 @@ struct ParamSpec {
     type_: i32,
 }
 
+#[derive(Clone)]
 struct PersistParam {
     id: u16,
     //name: String,
@@ -27,6 +28,10 @@ fn main() {
 
     let specs_json = fs::read_to_string("specs.json").unwrap_or_else(|_| "[]".to_string());
     let params_spec = json::from_str::<Vec<ParamSpec>>(&specs_json).unwrap();
+
+    let ids_merged = merge_ids(&params_spec);
+    //let ids_merged: Vec<(u16, u16)> = params_spec.iter().map(|it|  (it.id, it.id)).collect();
+    //println!("{:?}", ids_merged);
 
     let ui = AppWindow::new().unwrap();
     let ui_weak = ui.as_weak();
@@ -55,56 +60,71 @@ fn main() {
                 {
                     //let now = Instant::now();
 
-                    let mut ui_params: Vec<(i32, String, i32, Vec<bool>, f32)> = vec![];
-                    let mut persist_params: Vec<PersistParam> = vec![];
+                    // resize and assign by index - to restore params_spec order
+                    let mut ui_params: Vec<(i32, String, i32, Vec<bool>, f32)> = vec![(0, "".to_string(), 0, vec![], 0.0); params_spec.len()];
+                    let mut persist_params: Vec<PersistParam> = vec![PersistParam{id: 0, val: 0.0}; params_spec.len()];
 
-                    for it in &params_spec {
-                        let rsp = match ctx.read_input_registers((it.id - 1) * 2, 2).await {
+                    for id_range in &ids_merged {
+                        let reg_addr = (id_range.0 - 1) * 2;
+                        let reg_cnt = (id_range.1 - id_range.0 + 1) * 2;
+
+                        let rsp = match ctx.read_input_registers(reg_addr, reg_cnt).await {
                             Ok(rsp) => match rsp {
                                 Ok(rsp) => rsp,
-                                Err(err) => { println!("Exc1, {err:?}"); vec![0u16, 0u16] },
+                                Err(err) => { println!("Exc1, {err:?}"); vec![0u16; reg_cnt as usize] },
                             },
                             Err(err) => { println!("Conn1, {err:?}"); break 'read; },
                         };
-                        //println!("{} value is: {rsp:?}", it.0);
+                        //println!("{}-{} values is: {rsp:?}", id_range.0, id_range.1);
 
-                        match it.type_ {
-                            0 => {
-                                let param = to_int(rsp[0], rsp[1]);
-                                //println!("{} value is: 0b{param:b}", it.0);
+                        for id in id_range.0..=id_range.1 {
+                            let spec_index = match params_spec.iter().position(|it| it.id == id) {
+                                Some(it) => it,
+                                None => continue,
+                            };
+                            let spec = &params_spec[spec_index];
 
-                                let mut bits = vec![false; 32];
-                                for i in 0..32 {
-                                    bits[i] = (param & (1u32 << i)) != 0;
+                            let lo_i: usize = ((id - id_range.0) * 2).into();
+                            let hi_i: usize = lo_i + 1;
+
+                            match spec.type_ {
+                                0 => {
+                                    let param = to_int(rsp[lo_i], rsp[hi_i]);
+                                    //println!("{} value is: 0b{param:b}", spec.id);
+
+                                    let mut bits = vec![false; 32];
+                                    for i in 0..32 {
+                                        bits[i] = (param & (1u32 << i)) != 0;
+                                    }
+
+                                    ui_params[spec_index] = (spec.id.into(), spec.name.clone(), spec.type_, bits, 0.0);
+                                    
+                                    persist_params[spec_index] = PersistParam{
+                                        id: spec.id.into(),
+                                        //name: spec.name.clone(),
+                                        //type_: spec.type_,
+                                        val: param as f64,
+                                    };
                                 }
-            
-                                ui_params.push((it.id.into(), it.name.clone(), it.type_, bits, 0.0));
-                                
-                                persist_params.push(PersistParam{
-                                    id: it.id.into(),
-                                    //name: it.name.clone(),
-                                    //type_: it.type_,
-                                    val: param as f64,
-                                });
-                            }
-                            1 => {
-                                let param = to_float(rsp[0], rsp[1]);
-                                //println!("{} value is: {param}", it.0);
+                                1 => {
+                                    let param = to_float(rsp[lo_i], rsp[hi_i]);
+                                    //println!("{} value is: {param}", spec.id);
 
-                                ui_params.push((it.id.into(), it.name.clone(), it.type_, vec![], param));
+                                    ui_params[spec_index] = (spec.id.into(), spec.name.clone(), spec.type_, vec![], param);
 
-                                persist_params.push(PersistParam{
-                                    id: it.id.into(),
-                                    //name: it.name.clone(),
-                                    //type_: it.type_,
-                                    val: param as f64,
-                                });
+                                    persist_params[spec_index] = PersistParam{
+                                        id: spec.id.into(),
+                                        //name: spec.name.clone(),
+                                        //type_: spec.type_,
+                                        val: param as f64,
+                                    };
+                                }
+                                _ => unreachable!()
                             }
-                            _ => unreachable!()
                         }
                     }
 
-                    //println!("read {}x time {:?}", params_spec.len(), now.elapsed());
+                    //println!("read {} params in {} reads in {:?}", params_spec.len(), ids_merged.len(), now.elapsed());
 
                     // update ui
                     let ui_copy = ui_weak.clone();
@@ -242,6 +262,31 @@ fn main() {
     });
 
     ui.run().unwrap();
+}
+
+fn merge_ids(params_spec: &Vec<ParamSpec>) -> Vec<(u16, u16)> {
+    if params_spec.is_empty() {
+        return vec![];
+    }
+    let mut ids: Vec<u16> = params_spec.iter().map(|it| it.id).collect();
+    ids.sort();
+    let mut res: Vec<(u16, u16)> = vec![];
+    for current in ids {
+        match res.last_mut() {
+            Some(prev) => {
+                // 62 -> <=125 registers -> <=253 bytes
+                if ((prev.1 + 2) >= current) && ((current - prev.0 + 1) <= 62) {
+                    prev.1 = current;
+                } else {
+                    res.push((current, current));
+                }
+            },
+            None => {
+                res.push((current, current));
+            },
+        }
+    }
+    return res;
 }
 
 fn to_int(lo: u16, hi: u16) -> u32 {

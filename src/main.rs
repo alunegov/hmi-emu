@@ -24,7 +24,10 @@ struct PersistParam {
 
 fn main() {
     let mut args = env::args();
-    let socket_addr = args.nth(1).unwrap_or_else(|| "192.168.50.230:1313".into()).parse().unwrap();
+    args.next();  // skip program name
+    let socket_addr = args.next().unwrap_or_else(|| "192.168.50.230:1313".into()).parse().unwrap();
+    let device_addr = args.next().unwrap_or_else(|| "1".into()).parse().unwrap();
+    println!("ip {}, addr {}", socket_addr, device_addr);
 
     let specs_json = fs::read_to_string("specs.json").unwrap_or_else(|_| "[]".to_string());
     let params_spec = json::from_str::<Vec<ParamSpec>>(&specs_json).unwrap();
@@ -50,7 +53,7 @@ fn main() {
         'conn: loop {
             sleep(time::Duration::from_millis(1000));
 
-            let mut ctx = match tcp::connect(socket_addr).await {
+            let mut ctx = match tcp::connect_slave(socket_addr, Slave(device_addr)).await {
                 Ok(ctx) => { println!("Connected"); ctx },
                 Err(err) => { println!("Conn0, {err:?}"); continue 'conn; },
             };

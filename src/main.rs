@@ -43,7 +43,10 @@ fn main() {
 
     let (tx1, rx1) = mpsc::channel();
 
-    let storage_fname = format!("hmi-emu_{}.json", Local::now().format("%Y%m%d_%H%M%S"));
+    if let Err(err) = fs::create_dir("logs") {
+        println!("{err:?}");
+    }
+    let storage_fname = format!("logs/hmi-emu_{}.json", Local::now().format("%Y%m%d_%H%M%S"));
     let storage = fs::File::create(storage_fname).unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();

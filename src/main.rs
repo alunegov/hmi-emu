@@ -1,7 +1,8 @@
 use core::time;
 use chrono::Local;
 use miniserde::{json, Deserialize};
-use std::{env, fmt::Debug, fs, io::{BufWriter, Write}, rc::Rc, sync::mpsc, thread::sleep, time::Instant};
+use tokio::time::sleep;
+use std::{env, fmt::Debug, fs, io::{BufWriter, Write}, rc::Rc, sync::mpsc, time::{Duration, Instant}};
 use slint::{Model, ModelRc, VecModel};
 use tokio_modbus::prelude::*;
 
@@ -54,7 +55,7 @@ fn main() {
         let mut storage_writer = BufWriter::new(storage);
 
         'conn: loop {
-            sleep(time::Duration::from_millis(1000));
+            sleep(time::Duration::from_secs(1)).await;
 
             let mut ctx = match tcp::connect_slave(socket_addr, Slave(device_addr)).await {
                 Ok(ctx) => { println!("Connected"); ctx },
@@ -215,7 +216,7 @@ fn main() {
                     }
                 }
 
-                sleep(time::Duration::from_millis(500));
+                sleep(Duration::from_millis(500)).await;
             }
 
             // TODO: clear ui

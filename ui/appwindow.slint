@@ -1,6 +1,6 @@
 import { Button, VerticalBox, HorizontalBox, CheckBox, TextEdit, ScrollView, ComboBox } from "std-widgets.slint";
 
-export component ParamFlags inherits Window {
+component ParamFlags inherits Rectangle {
     in-out property <[bool]> model;
     in property <bool> read-only: false;
 
@@ -91,7 +91,7 @@ export component AppWindow inherits Window {
 
                 if it.type_ == 0: flags := ParamFlags {
                     model: it.val0;
-                    flag_clicked(a, b) => { root.flag_clicked(it.id, flags.model); }
+                    flag_clicked(idx, state) => { root.flag_clicked(it.id, flags.model); }
                 }
 
                 if it.type_ == 1: Text {

@@ -219,10 +219,7 @@ fn main() {
                         println!("{id} new value is: {req:?}");
                         let now = Instant::now();
                         match ctx.write_multiple_registers(((id - 1) * 2) as u16, &req).await {
-                            Ok(rsp) => match rsp {
-                                Ok(rsp) => rsp,
-                                Err(err) => println!("Exc3, {err:?}"),
-                            },
+                            Ok(_) => (),
                             Err(err) => { println!("Conn3, {err:?}"); break 'read; },
                         }
                         println!("write time {:?}", now.elapsed());
@@ -235,10 +232,7 @@ fn main() {
             // TODO: clear ui
 
             match ctx.disconnect().await {
-                Ok(res) => match res {
-                    Ok(_) => println!("Disconnected"),
-                    Err(err) => println!("Exc4, {err:?}"),
-                },
+                Ok(_) => println!("Disconnected"),
                 Err(err) => println!("Conn4, {err:?}"),
             };
         }

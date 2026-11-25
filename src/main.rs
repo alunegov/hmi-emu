@@ -126,6 +126,19 @@ fn main() {
                                         val: param as f64,
                                     };
                                 }
+                                2 | 3 => {
+                                    let param = to_int(rsp[lo_i], rsp[hi_i]);
+                                    //println!("{} value is: 0b{param:b}", spec.id);
+
+                                    ui_params[spec_index] = (spec.id.into(), spec.name.clone(), 1, vec![], param as f32);
+                                    
+                                    persist_params[spec_index] = PersistParam{
+                                        id: spec.id.into(),
+                                        //name: spec.name.clone(),
+                                        //type_: spec.type_,
+                                        val: param as f64,
+                                    };
+                                }
                                 _ => unreachable!()
                             }
                         }

@@ -1,9 +1,10 @@
 use core::time;
-use chrono::Local;
-use miniserde::{json, Deserialize};
-use tokio::time::sleep;
 use std::{env, fmt::Debug, fs, io::{BufWriter, Write}, rc::Rc, sync::mpsc, time::{Duration, Instant}};
+
+use jiff::ZonedDateTime;
+use miniserde::{json, Deserialize};
 use slint::{Model, ModelRc, VecModel};
+use tokio::time::sleep;
 use tokio_modbus::prelude::*;
 
 slint::include_modules!();
@@ -47,7 +48,7 @@ fn main() {
     if let Err(err) = fs::create_dir("logs") {
         println!("{err:?}");
     }
-    let storage_fname = format!("logs/hmi-emu_{}.json", Local::now().format("%Y%m%d_%H%M%S"));
+    let storage_fname = format!("logs/hmi-emu_{}.json", ZonedDateTime::now().strftime("%Y%m%d_%H%M%S"));
     let storage = fs::File::create(storage_fname).unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -165,7 +166,8 @@ fn main() {
 
                     // save to file
                     {
-                        let t = format!("{{\"time\":\"{}\"", Local::now().to_rfc3339());
+                        // datetime as RFC 3339
+                        let t = format!("{{\"time\":\"{}\"", ZonedDateTime::now().strftime("%Y-%m-%dT%H:%M:%S%.f%:z"));
                         if let Err(err) = storage_writer.write_all(t.as_bytes()) {
                             println!("write_all, {err:?}");
                         }

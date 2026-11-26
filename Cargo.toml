@@ -1,12 +1,12 @@
 [package]
 name = "hmi-emu"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Alexander Lunegov <alunegov@gmail.com>"]
 edition = "2021"
 build = "build.rs"
 
 [dependencies]
-chrono = "0.4"
+jiff = "1.0"
 miniserde = "0.1"
 slint = "1.0"
 tokio = { version = "1.0", features = ["full"] }

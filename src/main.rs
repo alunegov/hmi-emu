@@ -2,6 +2,7 @@ use core::time;
 use std::{env, fmt::Debug, fs, io::{BufWriter, Write}, rc::Rc, sync::mpsc, time::{Duration, Instant}};
 
 use jiff::ZonedDateTime;
+use log::{debug, info, warn};
 use miniserde::{json, Deserialize};
 use slint::{Model, ModelRc, VecModel};
 use tokio::time::sleep;
@@ -25,18 +26,20 @@ struct PersistParam {
 }
 
 fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     let mut args = env::args();
     args.next();  // skip program name
     let socket_addr = args.next().unwrap_or_else(|| "192.168.50.230:1313".into()).parse().unwrap();
     let device_addr = args.next().unwrap_or_else(|| "1".into()).parse().unwrap();
-    println!("ip {}, addr {}", socket_addr, device_addr);
+    info!("ip {}, addr {}", socket_addr, device_addr);
 
     let specs_json = fs::read_to_string("specs.json").unwrap_or_else(|_| "[]".to_string());
     let params_spec = json::from_str::<Vec<ParamSpec>>(&specs_json).unwrap();
 
     let ids_merged = merge_ids(&params_spec);
     //let ids_merged: Vec<(u16, u16)> = params_spec.iter().map(|it|  (it.id, it.id)).collect();
-    //println!("{:?}", ids_merged);
+    debug!("{:?}", ids_merged);
 
     let ui = AppWindow::new().unwrap();
     let ui_weak = ui.as_weak();
@@ -46,7 +49,7 @@ fn main() {
     let (tx1, rx1) = mpsc::channel();
 
     if let Err(err) = fs::create_dir("logs") {
-        println!("{err:?}");
+        warn!("{err:?}");
     }
     let storage_fname = format!("logs/hmi-emu_{}.json", ZonedDateTime::now().strftime("%Y%m%d_%H%M%S"));
     let storage = fs::File::create(storage_fname).unwrap();
@@ -59,14 +62,14 @@ fn main() {
             sleep(time::Duration::from_secs(1)).await;
 
             let mut ctx = match tcp::connect_slave(socket_addr, Slave(device_addr)).await {
-                Ok(ctx) => { println!("Connected"); ctx },
-                Err(err) => { println!("Conn0, {err:?}"); continue 'conn; },
+                Ok(ctx) => { info!("Connected"); ctx },
+                Err(err) => { warn!("Conn0, {err:?}"); continue 'conn; },
             };
 
             'read: loop {
                 // read params based on params_spec
                 {
-                    //let now = Instant::now();
+                    let now = Instant::now();
 
                     // resize and assign by index - to restore params_spec order
                     let mut ui_params: Vec<(i32, String, i32, Vec<bool>, f32)> = vec![(0, "".to_string(), 0, vec![], 0.0); params_spec.len()];
@@ -79,11 +82,11 @@ fn main() {
                         let rsp = match ctx.read_input_registers(reg_addr, reg_cnt).await {
                             Ok(rsp) => match rsp {
                                 Ok(rsp) => rsp,
-                                Err(err) => { println!("Exc1, {err:?}"); vec![0u16; reg_cnt as usize] },
+                                Err(err) => { warn!("Exc1, {err:?}"); vec![0u16; reg_cnt as usize] },
                             },
-                            Err(err) => { println!("Conn1, {err:?}"); break 'read; },
+                            Err(err) => { warn!("Conn1, {err:?}"); break 'read; },
                         };
-                        //println!("{}-{} values is: {rsp:?}", id_range.0, id_range.1);
+                        debug!("{}-{} values is: {rsp:?}", id_range.0, id_range.1);
 
                         for id in id_range.0..=id_range.1 {
                             let spec_index = match params_spec.iter().position(|it| it.id == id) {
@@ -98,7 +101,7 @@ fn main() {
                             match spec.type_ {
                                 0 => {
                                     let param = to_int(rsp[lo_i], rsp[hi_i]);
-                                    //println!("{} value is: 0b{param:b}", spec.id);
+                                    debug!("{} value is: 0b{param:b}", spec.id);
 
                                     let mut bits = vec![false; 32];
                                     for i in 0..32 {
@@ -116,7 +119,7 @@ fn main() {
                                 }
                                 1 => {
                                     let param = to_float(rsp[lo_i], rsp[hi_i]);
-                                    //println!("{} value is: {param}", spec.id);
+                                    debug!("{} value is: {param}", spec.id);
 
                                     ui_params[spec_index] = (spec.id.into(), spec.name.clone(), spec.type_, vec![], param);
 
@@ -129,7 +132,7 @@ fn main() {
                                 }
                                 2 | 3 => {
                                     let param = to_int(rsp[lo_i], rsp[hi_i]);
-                                    //println!("{} value is: 0b{param:b}", spec.id);
+                                    debug!("{} value is: 0b{param:b}", spec.id);
 
                                     ui_params[spec_index] = (spec.id.into(), spec.name.clone(), 1, vec![], param as f32);
                                     
@@ -145,7 +148,7 @@ fn main() {
                         }
                     }
 
-                    //println!("read {} params in {} reads in {:?}", params_spec.len(), ids_merged.len(), now.elapsed());
+                    debug!("read {} params in {} reads in {:?}", params_spec.len(), ids_merged.len(), now.elapsed());
 
                     // update ui
                     let ui_copy = ui_weak.clone();
@@ -169,19 +172,19 @@ fn main() {
                         // datetime as RFC 3339
                         let t = format!("{{\"time\":\"{}\"", ZonedDateTime::now().strftime("%Y-%m-%dT%H:%M:%S%.f%:z"));
                         if let Err(err) = storage_writer.write_all(t.as_bytes()) {
-                            println!("write_all, {err:?}");
+                            warn!("write_all, {err:?}");
                         }
                         for pp in persist_params {
                             let t = format!(",\"{}\":{}", pp.id, pp.val);
                             if let Err(err) = storage_writer.write_all(t.as_bytes()) {
-                                println!("write_all, {err:?}");
+                                warn!("write_all, {err:?}");
                             }
                         }
                         if let Err(err) = storage_writer.write_all(b"},\n") {
-                            println!("write_all, {err:?}");
+                            warn!("write_all, {err:?}");
                         }
                         if let Err(err) = storage_writer.flush() {
-                            println!("flush, {err:?}");
+                            warn!("flush, {err:?}");
                         }
                     }
                 }
@@ -193,12 +196,12 @@ fn main() {
                         let rsp = match ctx.read_input_registers(((id - 1) * 2) as u16, 2).await {
                             Ok(rsp) => match rsp {
                                 Ok(rsp) => rsp,
-                                Err(err) => { println!("Exc2, {err:?}"); vec![0u16, 0u16] },
+                                Err(err) => { warn!("Exc2, {err:?}"); vec![0u16, 0u16] },
                             }
-                            Err(err) => { println!("Conn2, {err:?}"); break 'read; }
+                            Err(err) => { warn!("Conn2, {err:?}"); break 'read; }
                         };
-                        println!("read time {:?}", now.elapsed());
-                        //println!("{} value is: {rsp:?}", id);
+                        info!("read time {:?}", now.elapsed());
+                        debug!("{} value is: {rsp:?}", id);
 
                         let uni_value = match type_ {
                             0 => to_float(rsp[0], rsp[1]).to_string(),
@@ -218,13 +221,13 @@ fn main() {
                 {
                     if let Ok((id, req0, req1)) = rx1.try_recv() {
                         let req = [req0, req1];
-                        println!("{id} new value is: {req:?}");
+                        info!("{id} new value is: {req:?}");
                         let now = Instant::now();
                         match ctx.write_multiple_registers(((id - 1) * 2) as u16, &req).await {
                             Ok(_) => (),
-                            Err(err) => { println!("Conn3, {err:?}"); break 'read; },
+                            Err(err) => { warn!("Conn3, {err:?}"); break 'read; },
                         }
-                        println!("write time {:?}", now.elapsed());
+                        info!("write time {:?}", now.elapsed());
                     }
                 }
 
@@ -234,8 +237,8 @@ fn main() {
             // TODO: clear ui
 
             match ctx.disconnect().await {
-                Ok(_) => println!("Disconnected"),
-                Err(err) => println!("Conn4, {err:?}"),
+                Ok(_) => info!("Disconnected"),
+                Err(err) => warn!("Conn4, {err:?}"),
             };
         }
     });
